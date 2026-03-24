@@ -62,3 +62,84 @@ export class MockAIAdapter implements AIAdapter {
     return undefined;
   }
 }
+
+export interface GeminiConfig {
+  apiKey: string;
+  model?: string;
+  maxRetries?: number;
+  baseDelayMs?: number;
+}
+
+export class GeminiDevAPIAdapter implements AIAdapter {
+  private readonly apiKey: string;
+  private readonly model: string;
+  private readonly maxRetries: number;
+  private readonly baseDelayMs: number;
+
+  constructor(config: GeminiConfig) {
+    this.apiKey = config.apiKey;
+    this.model = config.model ?? 'gemini-2.0-flash';
+    this.maxRetries = config.maxRetries ?? 3;
+    this.baseDelayMs = config.baseDelayMs ?? 1000;
+  }
+
+  async sendMultimodalRequest(request: AIRequest): Promise<AIResponse> {
+    return this.send(request);
+  }
+
+  async sendTextRequest(request: AIRequest): Promise<AIResponse> {
+    return this.send(request);
+  }
+
+  private async send(request: AIRequest): Promise<AIResponse> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await this.doRequest(request);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt < this.maxRetries) {
+          await this.delay(this.baseDelayMs * Math.pow(2, attempt));
+        }
+      }
+    }
+    throw { code: 'AI_PROVIDER_ERROR', message: `Gemini API failed after ${this.maxRetries + 1} attempts: ${lastError?.message}` };
+  }
+
+  private async doRequest(request: AIRequest): Promise<AIResponse> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const contents = request.messages.map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: typeof m.content === 'string'
+        ? [{ text: m.content }]
+        : m.content.map(p => p.data ? { inlineData: { mimeType: 'image/jpeg', data: p.data } } : { text: p.text ?? '' }),
+    }));
+
+    const body: Record<string, unknown> = { contents };
+    if (request.response_format === 'json') {
+      body.generationConfig = { responseMimeType: 'application/json' };
+    }
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`Gemini API ${res.status}: ${errBody}`);
+    }
+
+    const json = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } };
+    const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    return {
+      content: text,
+      usage: json.usageMetadata ? { prompt_tokens: json.usageMetadata.promptTokenCount ?? 0, completion_tokens: json.usageMetadata.candidatesTokenCount ?? 0 } : undefined,
+    };
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
