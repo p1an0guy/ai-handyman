@@ -10,6 +10,7 @@ import {
 import { OrchestratorEventLogger, SessionManager, WorkflowOrchestrator } from './orchestrator/index.js';
 import { MockAIAdapter } from './ai/ai-adapter.js';
 import { createRouter } from './api/routes.js';
+import { errorHandler } from './api/middleware.js';
 
 const sessionStore = new InMemorySessionStore();
 const eventLog = new InMemoryEventLog();
@@ -33,6 +34,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use(createRouter({ sessionManager, workflowOrchestrator }));
+app.use(errorHandler);
 
 const PORT = process.env.PORT ?? 3001;
 
