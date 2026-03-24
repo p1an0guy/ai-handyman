@@ -31,7 +31,7 @@
 
 ## Phase 6: Testing and Validation (in progress)
 - [x] Task 25: Property-based tests (fast-check) — `1fc00e2` — `src/orchestrator/state-machine.test.ts` (11 property tests, 200 runs each)
-- [ ] Task 26: Unit tests
+- [x] Task 26: Unit tests — `91bbc79` — 20 new tests across session-manager, safety-policy, step-graph-generator, pdf-parser (31 total passing)
 - [ ] Task 27: Integration and eval tests
 
 ## Open Items
