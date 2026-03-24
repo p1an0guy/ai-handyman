@@ -2,14 +2,16 @@ import express from 'express';
 import { derivedState } from '../orchestrator/state-machine.js';
 import type { SessionManager } from '../orchestrator/session-manager.js';
 import type { WorkflowOrchestrator } from '../orchestrator/workflow-orchestrator.js';
+import type { IngestionJobManager } from '../ingestion/job-manager.js';
 
 export interface AppDependencies {
   sessionManager: SessionManager;
   workflowOrchestrator: WorkflowOrchestrator;
+  ingestionJobManager: IngestionJobManager;
 }
 
 export function createRouter(deps: AppDependencies): express.Router {
-  const { sessionManager, workflowOrchestrator } = deps;
+  const { sessionManager, workflowOrchestrator, ingestionJobManager } = deps;
   const router = express.Router();
 
   // POST /sessions
@@ -156,24 +158,42 @@ export function createRouter(deps: AppDependencies): express.Router {
     }
   });
 
-  // POST /ingest_manual (stub)
-  router.post('/ingest_manual', (_req, res) => {
-    res.status(202).json({
-      job_id: 'stub',
-      status: 'queued',
-      status_url: '/ingestion_jobs/stub',
-      resume_url: '/ingestion_jobs/stub/resume',
-    });
+  // POST /ingest_manual
+  router.post('/ingest_manual', async (req, res, next) => {
+    try {
+      const body = req.body as { file_base64?: string; metadata?: { manufacturer?: string; product_name?: string } };
+      const buffer = body.file_base64 ? Buffer.from(body.file_base64, 'base64') : Buffer.alloc(0);
+      const job = await ingestionJobManager.startIngestionJob(buffer, body.metadata);
+      res.status(202).json({
+        job_id: job.job_id,
+        manual_id: job.manual_id,
+        status: job.status,
+        status_url: `/ingestion_jobs/${job.job_id}`,
+        resume_url: `/ingestion_jobs/${job.job_id}/resume`,
+      });
+    } catch (err) {
+      next(err);
+    }
   });
 
-  // GET /ingestion_jobs/:job_id (stub)
-  router.get('/ingestion_jobs/:job_id', (req, res) => {
-    res.json({ job_id: req.params.job_id, status: 'queued', stage: 'upload_received', progress_percent: 0 });
+  // GET /ingestion_jobs/:job_id
+  router.get('/ingestion_jobs/:job_id', async (req, res, next) => {
+    try {
+      const job = await ingestionJobManager.getIngestionJob(req.params.job_id);
+      res.json(job);
+    } catch (err) {
+      next(err);
+    }
   });
 
-  // POST /ingestion_jobs/:job_id/resume (stub)
-  router.post('/ingestion_jobs/:job_id/resume', (req, res) => {
-    res.json({ job_id: req.params.job_id, status: 'queued', stage: 'upload_received', progress_percent: 0 });
+  // POST /ingestion_jobs/:job_id/resume
+  router.post('/ingestion_jobs/:job_id/resume', async (req, res, next) => {
+    try {
+      const job = await ingestionJobManager.resumeIngestionJob(req.params.job_id);
+      res.json(job);
+    } catch (err) {
+      next(err);
+    }
   });
 
   return router;
