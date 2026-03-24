@@ -96,6 +96,7 @@ export function createSampleIngestionJob(status: 'queued' | 'processing' | 'comp
     resume_cursor: {},
     result: {},
     errors: [],
+    source_file_base64: Buffer.from('%PDF-1.4 fixture').toString('base64'),
     created_at: now,
     updated_at: now,
   };

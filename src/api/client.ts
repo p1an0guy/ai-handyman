@@ -3,6 +3,27 @@ import type * as C from './contracts.js';
 export class ApiClient {
   constructor(private readonly baseUrl: string) {}
 
+  async ingestManual(file: File, metadata?: { manufacturer?: string; product_name?: string }): Promise<C.IngestManualResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (metadata?.manufacturer) formData.append('manufacturer', metadata.manufacturer);
+    if (metadata?.product_name) formData.append('product_name', metadata.product_name);
+    const res = await fetch(`${this.baseUrl}/ingest_manual`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) throw await res.json();
+    return res.json() as Promise<C.IngestManualResponse>;
+  }
+
+  async getIngestionJob(jobId: string): Promise<C.IngestionJobResponse> {
+    return this.get(`/ingestion_jobs/${jobId}`);
+  }
+
+  async resumeIngestionJob(jobId: string): Promise<C.IngestionJobResponse> {
+    return this.post(`/ingestion_jobs/${jobId}/resume`, {});
+  }
+
   async createSession(manualId: string): Promise<C.CreateSessionResponse> {
     return this.post('/sessions', { manual_id: manualId });
   }

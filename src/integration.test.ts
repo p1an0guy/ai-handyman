@@ -7,6 +7,8 @@ import { SessionManager } from './orchestrator/session-manager.js';
 import { WorkflowOrchestrator } from './orchestrator/workflow-orchestrator.js';
 import { OrchestratorEventLogger } from './orchestrator/event-logger.js';
 import { MockAIAdapter } from './ai/ai-adapter.js';
+import { ModelOrchestrationLayer } from './ai/model-orchestration.js';
+import { VerificationSubsystem } from './verification/verification-subsystem.js';
 import { sampleStepGraph, sampleDiagramIndex, SAMPLE_MANUAL_ID } from './fixtures/index.js';
 import { SessionLifecycleState, StepWorkflowState } from './models/index.js';
 import { derivedState } from './orchestrator/state-machine.js';
@@ -27,8 +29,10 @@ describe('Integration: Full Assembly Flow', () => {
     manualStore = new InMemoryManualStore();
     eventLogger = new OrchestratorEventLogger(eventLog);
     const mockAdapter = new MockAIAdapter();
-    sessionManager = new SessionManager(sessionStore, manualStore);
-    workflowOrchestrator = new WorkflowOrchestrator(sessionStore, manualStore, imageStore, eventLogger, mockAdapter);
+    const modelLayer = new ModelOrchestrationLayer(mockAdapter);
+    const verificationSubsystem = new VerificationSubsystem(mockAdapter);
+    sessionManager = new SessionManager(sessionStore, manualStore, eventLogger);
+    workflowOrchestrator = new WorkflowOrchestrator(sessionStore, manualStore, imageStore, eventLogger, modelLayer, verificationSubsystem);
 
     await manualStore.save(
       { manual_id: SAMPLE_MANUAL_ID, raw_text: 'Bookshelf assembly manual', page_images: [] },

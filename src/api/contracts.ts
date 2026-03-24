@@ -1,4 +1,15 @@
-import type { SessionLifecycleState, StepWorkflowState, DerivedState, Step, Warning, BlockedState } from '../models/index.js';
+import type {
+  SessionLifecycleState,
+  StepWorkflowState,
+  DerivedState,
+  Step,
+  Warning,
+  BlockedState,
+  IngestionJobStatus,
+  IngestionStage,
+  IngestionError,
+  IngestionResult,
+} from '../models/index.js';
 
 // POST /sessions
 export type CreateSessionRequest = { manual_id: string };
@@ -98,7 +109,7 @@ export type AdvanceResponse = {
 export type IngestManualResponse = {
   job_id: string;
   manual_id: string;
-  status: string;
+  status: IngestionJobStatus;
   status_url: string;
   resume_url: string;
 };
@@ -106,7 +117,11 @@ export type IngestManualResponse = {
 // GET /ingestion_jobs/:id
 export type IngestionJobResponse = {
   job_id: string;
-  status: string;
-  stage: string;
+  manual_id: string;
+  status: IngestionJobStatus;
+  stage: IngestionStage;
   progress_percent: number;
+  attempt_count: number;
+  result: IngestionResult;
+  errors: IngestionError[];
 };

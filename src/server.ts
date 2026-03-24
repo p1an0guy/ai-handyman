@@ -13,6 +13,7 @@ import { ModelOrchestrationLayer } from './ai/model-orchestration.js';
 import { IngestionJobManager } from './ingestion/job-manager.js';
 import { createRouter } from './api/routes.js';
 import { errorHandler } from './api/middleware.js';
+import { VerificationSubsystem } from './verification/verification-subsystem.js';
 
 const sessionStore = new InMemorySessionStore();
 const eventLog = new InMemoryEventLog();
@@ -22,9 +23,10 @@ const jobStore = new InMemoryJobStore();
 
 const mockAIAdapter = new MockAIAdapter();
 const eventLogger = new OrchestratorEventLogger(eventLog);
-const sessionManager = new SessionManager(sessionStore, manualStore);
-const workflowOrchestrator = new WorkflowOrchestrator(sessionStore, manualStore, imageStore, eventLogger, mockAIAdapter);
 const modelLayer = new ModelOrchestrationLayer(mockAIAdapter);
+const verificationSubsystem = new VerificationSubsystem(mockAIAdapter);
+const sessionManager = new SessionManager(sessionStore, manualStore, eventLogger);
+const workflowOrchestrator = new WorkflowOrchestrator(sessionStore, manualStore, imageStore, eventLogger, modelLayer, verificationSubsystem);
 const ingestionJobManager = new IngestionJobManager(jobStore, manualStore, modelLayer, eventLogger);
 
 export const deps = { sessionStore, eventLog, imageStore, manualStore, jobStore, sessionManager, workflowOrchestrator, ingestionJobManager };

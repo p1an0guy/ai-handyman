@@ -1,13 +1,7 @@
-interface VerificationResultData {
-  verification_result: 'pass' | 'fail' | 'insufficient';
-  confidence_score: number;
-  mismatch?: string;
-  additional_evidence_request?: string;
-  warnings?: string[];
-}
+import type { VerifyStepResponse } from '../api-types';
 
 interface VerificationResultProps {
-  result: VerificationResultData | null;
+  result: VerifyStepResponse | null;
   onOverride?: () => void;
   onReCapture?: () => void;
   onAdvance?: () => void;
@@ -22,15 +16,15 @@ export function VerificationResult({ result, onOverride, onReCapture, onAdvance 
   return (
     <div style={{ background: bgColor, padding: '12px', borderRadius: '8px', marginBottom: '10px' }}>
       <p><strong>Result:</strong> {result.verification_result.toUpperCase()} — Confidence: {Math.round(result.confidence_score * 100)}%</p>
-      {result.warnings && result.warnings.length > 0 && (
-        <ul>{result.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+      {result.warnings.length > 0 && (
+        <ul>{result.warnings.map((warning) => <li key={warning.warning_id}>{warning.message}</li>)}</ul>
       )}
       {result.verification_result === 'pass' && (
         <button onClick={onAdvance}>Next Step</button>
       )}
       {result.verification_result === 'fail' && (
         <div>
-          {result.mismatch && <p>{result.mismatch}</p>}
+          {result.mismatch && <p>{result.mismatch.description ?? result.mismatch.type ?? 'Mismatch detected'}</p>}
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={onReCapture}>Re-capture</button>
             <button onClick={onOverride}>Override</button>
@@ -39,7 +33,7 @@ export function VerificationResult({ result, onOverride, onReCapture, onAdvance 
       )}
       {result.verification_result === 'insufficient' && (
         <div>
-          {result.additional_evidence_request && <p>{result.additional_evidence_request}</p>}
+          {result.additional_evidence_request && <p>{result.additional_evidence_request.guidance}</p>}
           <button onClick={onReCapture}>Take Another Photo</button>
         </div>
       )}

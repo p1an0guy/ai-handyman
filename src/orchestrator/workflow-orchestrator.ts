@@ -4,6 +4,7 @@ import {
   SessionLifecycleState,
   StepWorkflowState,
   Step,
+  DiagramEntry,
   Warning,
   BlockedState,
   DerivedState,
@@ -12,7 +13,9 @@ import {
 import { validateTransition, derivedState } from './state-machine.js';
 import type { SessionStore, ManualStore, ImageStore } from '../storage/interfaces.js';
 import type { OrchestratorEventLogger } from './event-logger.js';
-import type { AIAdapter } from '../ai/ai-adapter.js';
+import type { ModelOrchestrationLayer, StructuredAnswer } from '../ai/model-orchestration.js';
+import type { VerificationSubsystem } from '../verification/verification-subsystem.js';
+import { evaluateTransition } from '../safety/safety-policy.js';
 
 export type StepContext = {
   session_id: string;
@@ -49,7 +52,8 @@ export class WorkflowOrchestrator {
     private readonly manualStore: ManualStore,
     private readonly imageStore: ImageStore,
     private readonly eventLogger: OrchestratorEventLogger,
-    private readonly aiAdapter: AIAdapter,
+    private readonly modelLayer: ModelOrchestrationLayer,
+    private readonly verificationSubsystem: VerificationSubsystem,
     private readonly confidenceThreshold: number = 0.7,
   ) {}
 
@@ -79,6 +83,17 @@ export class WorkflowOrchestrator {
 
   async submitEvidence(sessionId: string, stepId: string, evidenceImage: Buffer, notes?: string): Promise<VerificationResponse> {
     let session = await this.loadSessionOrThrow(sessionId);
+    const stepGraph = await this.manualStore.getStepGraph(session.manual_id);
+    if (!stepGraph) {
+      throw { code: 'MANUAL_NOT_FOUND', message: `Manual ${session.manual_id} not found` };
+    }
+    const step = stepGraph.steps.find((candidate) => candidate.step_id === stepId);
+    if (!step) {
+      throw { code: 'STEP_MISMATCH', message: `Step ${stepId} is not part of manual ${session.manual_id}` };
+    }
+    const manual = await this.manualStore.getManual(session.manual_id);
+    const diagramIndex = await this.manualStore.getDiagramIndex(session.manual_id);
+    const diagramEntry = diagramIndex?.entries.find((entry) => entry.step_id === stepId);
 
     if (session.current_step_id !== stepId) {
       throw { code: 'STEP_MISMATCH', message: `Step ${stepId} does not match current step ${session.current_step_id}` };
@@ -88,6 +103,7 @@ export class WorkflowOrchestrator {
     }
 
     const correlationId = uuidv4();
+    const evidenceBase64 = evidenceImage.toString('base64');
 
     // Upload evidence
     const imageRef = await this.imageStore.upload(evidenceImage, { session_id: sessionId, step_id: stepId, filename: `evidence-${correlationId}.jpg` });
@@ -107,35 +123,66 @@ export class WorkflowOrchestrator {
       session.step_workflow_state = r2.workflow;
     }
 
-    // Call AI
-    const prompt = `Please verify the evidence for step ${stepId}. Notes: ${notes ?? ''}`;
-    await this.eventLogger.logModelRequest({ sessionId, correlationId, promptRef: prompt });
-    const aiResponse = await this.aiAdapter.sendMultimodalRequest({
-      messages: [{ role: 'user', content: prompt }],
-      response_format: 'json',
+    await this.eventLogger.logModelRequest({ sessionId, correlationId, promptRef: `verify_step:${stepId}` });
+    const proposal = await this.modelLayer.verifyStep({
+      sessionId,
+      step,
+      evidenceImageBase64: evidenceBase64,
+      diagramRefs: diagramEntry ? [diagramEntry.image_ref] : [],
+      conversationHistory: notes ? [{ role: 'user', content: notes }] : [],
+      manualContext: manual?.raw_text,
     });
-    await this.eventLogger.logModelResponse({ sessionId, correlationId, responseRef: aiResponse.content });
+    const verification = await this.verificationSubsystem.compareEvidence(
+      evidenceBase64,
+      step.expected_visual_cues,
+      this.toDiagramReference(diagramEntry),
+    );
+    const mismatchClassification = verification.mismatch_detected
+      ? (verification.mismatch_classification ?? await this.verificationSubsystem.classifyMismatch(evidenceBase64, step.expected_visual_cues))
+      : undefined;
+    const confidence_score = Math.min(
+      proposal.confidence_score || 1,
+      verification.confidence_score || proposal.confidence_score || 0,
+    );
+    const mismatch_detected = proposal.mismatch_detected || verification.mismatch_detected;
+    const mismatch_details = mismatchClassification
+      ? {
+          type: mismatchClassification.type,
+          description: mismatchClassification.description,
+          visual_indicator: proposal.mismatch_details.visual_indicator,
+        }
+      : proposal.mismatch_details;
+    const mergedProposal: StepTransitionProposal = {
+      ...proposal,
+      confidence_score,
+      mismatch_detected,
+      mismatch_details,
+      evidence_references: [...new Set([...proposal.evidence_references, imageRef.ref])],
+    };
+    await this.eventLogger.logModelResponse({
+      sessionId,
+      correlationId,
+      responseRef: JSON.stringify({
+        proposal_id: mergedProposal.proposal_id,
+        confidence_score,
+        mismatch_detected,
+        mismatch_type: mismatch_details.type,
+      }),
+      confidenceScore: confidence_score,
+    });
 
-    // Parse proposal
-    let proposal: StepTransitionProposal;
-    try {
-      proposal = JSON.parse(aiResponse.content) as StepTransitionProposal;
-    } catch {
-      proposal = {
-        proposal_id: uuidv4(),
-        session_id: sessionId,
-        current_step_id: stepId,
-        proposed_next_step_id: '',
-        reason: 'Parse error',
-        confidence_score: 0,
-        evidence_references: [],
-        warnings: [],
-        mismatch_detected: false,
-        mismatch_details: {},
-      };
-    }
-
-    const { confidence_score, mismatch_detected, mismatch_details, warnings: proposalWarnings } = proposal;
+    const safetyEvaluation = evaluateTransition(mergedProposal, session, stepGraph);
+    const requiresAdditionalEvidence = confidence_score < this.confidenceThreshold && safetyEvaluation.result !== 'block';
+    const additionalEvidenceRequest = requiresAdditionalEvidence
+      ? await this.modelLayer.requestAdditionalEvidence({
+          sessionId,
+          step,
+          evidenceImageBase64: evidenceBase64,
+          diagramRefs: diagramEntry ? [diagramEntry.image_ref] : [],
+          conversationHistory: notes ? [{ role: 'user', content: notes }] : [],
+          manualContext: manual?.raw_text,
+        })
+      : undefined;
     const now = new Date().toISOString();
 
     // Add evidence record
@@ -144,25 +191,25 @@ export class WorkflowOrchestrator {
       image_ref: imageRef.ref,
       submitted_at: now,
       confidence_score,
-      verification_result: mismatch_detected || confidence_score < this.confidenceThreshold ? (mismatch_detected ? 'fail' : 'insufficient') : 'pass',
+      verification_result: safetyEvaluation.result === 'block' ? 'fail' : requiresAdditionalEvidence ? 'insufficient' : 'pass',
     });
 
-    // Add warnings from proposal
-    const newWarnings: Warning[] = proposalWarnings.map((w) => ({
-      warning_id: uuidv4(),
-      step_id: stepId,
-      type: 'low_confidence' as const,
-      message: w.message,
-      issued_at: now,
-    }));
+    const proposalWarnings = mergedProposal.warnings.map((warning) => this.mapProposalWarning(stepId, warning.type, warning.message, now));
+    const newWarnings: Warning[] = [...proposalWarnings, ...safetyEvaluation.warnings];
     session.active_warnings.push(...newWarnings);
 
     let verificationResult: 'pass' | 'fail' | 'insufficient';
     let nextStep: Step | null = null;
 
-    await this.eventLogger.logSafetyEvaluation({ sessionId, correlationId, stepId, result: mismatch_detected ? 'fail' : confidence_score >= this.confidenceThreshold ? 'pass' : 'insufficient' });
+    await this.eventLogger.logSafetyEvaluation({
+      sessionId,
+      correlationId,
+      stepId,
+      result: safetyEvaluation.result,
+      details: { confidence_score, requires_additional_evidence: requiresAdditionalEvidence },
+    });
 
-    if (mismatch_detected || (confidence_score < this.confidenceThreshold && mismatch_detected)) {
+    if (safetyEvaluation.result === 'block') {
       // BLOCKED
       verificationResult = 'fail';
       const r = validateTransition(session.session_lifecycle_state, session.step_workflow_state, 'verification_fail');
@@ -171,26 +218,37 @@ export class WorkflowOrchestrator {
       session.step_workflow_state = r.workflow;
       session.blocked_state = {
         is_blocked: true,
-        reason: mismatch_details?.description ?? 'Verification failed',
+        reason: safetyEvaluation.block_reason ?? mismatch_details?.description ?? 'Verification failed',
         mismatch_classification: mismatch_details?.type,
         confidence_score,
         blocked_at: now,
       };
       session.detected_mismatches.push({
         step_id: stepId,
-        mismatch_type: 'other',
+        mismatch_type: mismatchClassification?.type ?? 'other',
         description: mismatch_details?.description ?? '',
         confidence_score,
         detected_at: now,
       });
-    } else if (confidence_score < this.confidenceThreshold) {
+      session.pending_evidence_request = {};
+      await this.eventLogger.logBlockApplied({
+        sessionId,
+        correlationId,
+        stepId,
+        details: { reason: session.blocked_state.reason, mismatch_type: mismatch_details?.type },
+      });
+    } else if (requiresAdditionalEvidence) {
       // INSUFFICIENT
       verificationResult = 'insufficient';
       const r = validateTransition(session.session_lifecycle_state, session.step_workflow_state, 'insufficient_evidence');
       if (!r.valid) throw { code: r.code, message: r.message };
       session.session_lifecycle_state = r.lifecycle;
       session.step_workflow_state = r.workflow;
-      session.pending_evidence_request = { guidance: 'Please provide clearer evidence', focus_area: stepId };
+      session.blocked_state = { is_blocked: false };
+      session.pending_evidence_request = {
+        guidance: additionalEvidenceRequest?.guidance ?? verification.guidance ?? 'Please provide clearer evidence',
+        focus_area: additionalEvidenceRequest?.focus_area ?? stepId,
+      };
     } else {
       // PASS
       verificationResult = 'pass';
@@ -198,13 +256,19 @@ export class WorkflowOrchestrator {
       if (!r.valid) throw { code: r.code, message: r.message };
       session.session_lifecycle_state = r.lifecycle;
       session.step_workflow_state = r.workflow;
+      session.blocked_state = { is_blocked: false };
+      session.pending_evidence_request = {};
       session.completed_steps.push({ step_id: stepId, completed_at: now, confidence_score });
+      nextStep = stepGraph.steps.find((s) => s.step_number === step.step_number + 1) ?? null;
+    }
 
-      // Find next step
-      const stepGraph = await this.manualStore.getStepGraph(session.manual_id);
-      const steps = stepGraph?.steps ?? [];
-      const currentStep = steps.find((s) => s.step_id === stepId);
-      nextStep = steps.find((s) => s.step_number === (currentStep?.step_number ?? 0) + 1) ?? null;
+    for (const warning of newWarnings) {
+      await this.eventLogger.logWarningIssued({
+        sessionId,
+        correlationId,
+        stepId,
+        details: { type: warning.type, message: warning.message },
+      });
     }
 
     await this.eventLogger.logStateTransition({
@@ -304,17 +368,41 @@ export class WorkflowOrchestrator {
   }
 
   async askQuestion(sessionId: string, question: string, contextStepId?: string): Promise<ChatResponse> {
-    await this.loadSessionOrThrow(sessionId);
-    const prompt = contextStepId ? `${question} (context: step ${contextStepId})` : question;
-    const aiResponse = await this.aiAdapter.sendTextRequest({
-      messages: [{ role: 'user', content: prompt }],
-      response_format: 'json',
+    const session = await this.loadSessionOrThrow(sessionId);
+    const manual = await this.manualStore.getManual(session.manual_id);
+    const stepGraph = await this.manualStore.getStepGraph(session.manual_id);
+    const step = stepGraph?.steps.find((candidate) => candidate.step_id === (contextStepId ?? session.current_step_id));
+    const answer: StructuredAnswer = await this.modelLayer.answerQuestion({
+      sessionId,
+      question,
+      step,
+      manualContext: manual?.raw_text,
     });
-    try {
-      return JSON.parse(aiResponse.content) as ChatResponse;
-    } catch {
-      return { answer: aiResponse.content, source_references: [], suggested_actions: [] };
-    }
+    return answer;
+  }
+
+  private toDiagramReference(entry?: DiagramEntry): { diagram_id: string; image_ref: string; description?: string } | undefined {
+    if (!entry) return undefined;
+    return {
+      diagram_id: entry.diagram_id,
+      image_ref: entry.image_ref,
+      description: entry.description,
+    };
+  }
+
+  private mapProposalWarning(stepId: string, type: string, message: string, issuedAt: string): Warning {
+    const normalizedType = type.toLowerCase().includes('orientation')
+      ? 'orientation'
+      : type.toLowerCase().includes('mismatch')
+        ? 'mismatch'
+        : 'low_confidence';
+    return {
+      warning_id: uuidv4(),
+      step_id: stepId,
+      type: normalizedType,
+      message,
+      issued_at: issuedAt,
+    };
   }
 
   private async loadSessionOrThrow(sessionId: string): Promise<SessionState> {

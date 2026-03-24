@@ -1,54 +1,43 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useSession } from '../hooks/useSession';
 import { ErrorDisplay, SessionControls, ProgressBar, CameraCapture, StepDisplay, VerificationResult } from '../components';
 import { ChatPanel } from '../components/ChatPanel';
+import type { CurrentStepResponse, VerifyStepResponse } from '../api-types';
 
-interface StepContext {
-  step: {
-    step_id: string;
-    step_number: number;
-    title: string;
-    description: string;
-    parts_required: string[];
-    tools_required: string[];
-    safety_notes: string[];
-    expected_visual_cues: string[];
-  } | null;
-  progress: { completed: number; total: number; percentage: number };
-}
-
-interface VerificationResultData {
-  verification_result: 'pass' | 'fail' | 'insufficient';
-  confidence_score: number;
-  mismatch?: string;
-  additional_evidence_request?: string;
-  warnings?: string[];
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'object' && error !== null) {
+    const maybeError = error as { error?: { message?: string } };
+    if (maybeError.error?.message) {
+      return maybeError.error.message;
+    }
+  }
+  return fallback;
 }
 
 export function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { session, error, loadSession, pauseSession, resumeSession, setError } = useSession(sessionId!);
-  const [stepContext, setStepContext] = useState<StepContext | null>(null);
-  const [verifyResult, setVerifyResult] = useState<VerificationResultData | null>(null);
+  const [stepContext, setStepContext] = useState<CurrentStepResponse | null>(null);
+  const [verifyResult, setVerifyResult] = useState<VerifyStepResponse | null>(null);
 
-  async function fetchStepContext() {
+  const fetchStepContext = useCallback(async () => {
     try {
       const res = await fetch(`/api/session/${sessionId}/step_context`);
       if (!res.ok) throw await res.json();
-      setStepContext(await res.json());
-    } catch (e: any) {
-      setError(e?.error?.message ?? 'Failed to load step context');
+      setStepContext((await res.json()) as CurrentStepResponse);
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, 'Failed to load step context'));
     }
-  }
+  }, [sessionId, setError]);
 
   useEffect(() => {
     loadSession().then(() => fetchStepContext());
-  }, []);
+  }, [fetchStepContext, loadSession]);
 
   useEffect(() => {
     if (session?.step_workflow_state) fetchStepContext();
-  }, [session?.step_workflow_state]);
+  }, [fetchStepContext, session?.step_workflow_state]);
 
   async function handleCapture(imageData: string) {
     if (!stepContext?.step) return;
@@ -58,10 +47,10 @@ export function SessionPage() {
         body: JSON.stringify({ step_id: stepContext.step.step_id, evidence_image: imageData }),
       });
       if (!res.ok) throw await res.json();
-      setVerifyResult(await res.json());
+      setVerifyResult((await res.json()) as VerifyStepResponse);
       await loadSession();
-    } catch (e: any) {
-      setError(e?.error?.message ?? 'Verification failed');
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, 'Verification failed'));
     }
   }
 
@@ -75,8 +64,8 @@ export function SessionPage() {
       if (!res.ok) throw await res.json();
       setVerifyResult(null);
       await loadSession();
-    } catch (e: any) {
-      setError(e?.error?.message ?? 'Override failed');
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, 'Override failed'));
     }
   }
 
@@ -86,8 +75,8 @@ export function SessionPage() {
       if (!res.ok) throw await res.json();
       setVerifyResult(null);
       await loadSession();
-    } catch (e: any) {
-      setError(e?.error?.message ?? 'Advance failed');
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, 'Advance failed'));
     }
   }
 

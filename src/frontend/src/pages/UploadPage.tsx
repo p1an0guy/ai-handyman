@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { IngestManualResponse } from '../api-types';
 
 export function UploadPage() {
   const navigate = useNavigate();
@@ -24,13 +25,14 @@ export function UploadPage() {
     setLoading(true);
     setError('');
     try {
+      const formData = new FormData();
+      formData.append('file', file);
       const res = await fetch('/api/ingest_manual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file: 'stub' }),
+        body: formData,
       });
       if (!res.ok) throw new Error(`API error ${res.status}`);
-      const data = await res.json();
+      const data = (await res.json()) as IngestManualResponse;
       navigate(`/ingestion/${data.job_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');

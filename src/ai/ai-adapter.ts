@@ -33,6 +33,38 @@ const QA_RESPONSE = JSON.stringify({
   suggested_actions: ['Check alignment before tightening'],
 });
 
+const COMPARE_RESPONSE = JSON.stringify({
+  passed: true,
+  confidence_score: 0.95,
+  mismatch_detected: false,
+  guidance: null,
+});
+
+const CLASSIFY_RESPONSE = JSON.stringify({
+  type: 'other',
+  description: 'No mismatch detected',
+  confidence_score: 0.95,
+});
+
+const STEP_GRAPH_RESPONSE = JSON.stringify({
+  version: '1.0.0',
+  steps: [
+    {
+      step_id: 'step-1',
+      step_number: 1,
+      title: 'Prepare the base',
+      description: 'Place the base panel on a flat surface.',
+      parts_required: [],
+      tools_required: [],
+      prerequisites: [],
+      safety_notes: [],
+      expected_visual_cues: [{ description: 'Base panel laid flat' }],
+      common_errors: [],
+      completion_checks: [],
+    },
+  ],
+});
+
 export class MockAIAdapter implements AIAdapter {
   constructor(private readonly responses: Map<string, AIResponse> = new Map()) {}
 
@@ -44,12 +76,28 @@ export class MockAIAdapter implements AIAdapter {
       if (typeof c === 'string') return c.toLowerCase().includes('verify');
       return c.some((p) => (p.text ?? '').toLowerCase().includes('verify'));
     });
+    const hasCompare = request.messages.some((m) => {
+      const c = m.content;
+      if (typeof c === 'string') return c.toLowerCase().includes('compare this assembly evidence');
+      return c.some((p) => (p.text ?? '').toLowerCase().includes('compare this assembly evidence'));
+    });
+    const hasClassify = request.messages.some((m) => {
+      const c = m.content;
+      if (typeof c === 'string') return c.toLowerCase().includes('classify the mismatch');
+      return c.some((p) => (p.text ?? '').toLowerCase().includes('classify the mismatch'));
+    });
+    if (hasCompare) return { content: COMPARE_RESPONSE };
+    if (hasClassify) return { content: CLASSIFY_RESPONSE };
     return { content: hasVerify ? VERIFY_RESPONSE : QA_RESPONSE };
   }
 
   async sendTextRequest(request: AIRequest): Promise<AIResponse> {
     const key = this.matchKey(request);
     if (key) return this.responses.get(key)!;
+    const prompt = request.messages.map((message) => typeof message.content === 'string' ? message.content : message.content.map((part) => part.text ?? '').join(' ')).join(' ');
+    if (prompt.toLowerCase().includes('extract a structured step graph')) {
+      return { content: STEP_GRAPH_RESPONSE };
+    }
     return { content: QA_RESPONSE };
   }
 

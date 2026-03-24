@@ -2,11 +2,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { SessionState, SessionLifecycleState, StepWorkflowState } from '../models/index.js';
 import { validateTransition, captureResumeSnapshot, restoreFromSnapshot } from './state-machine.js';
 import type { SessionStore, ManualStore } from '../storage/interfaces.js';
+import type { OrchestratorEventLogger } from './event-logger.js';
 
 export class SessionManager {
   constructor(
     private readonly sessionStore: SessionStore,
     private readonly manualStore: ManualStore,
+    private readonly eventLogger?: OrchestratorEventLogger,
   ) {}
 
   async createSession(manualId: string): Promise<SessionState> {
@@ -78,6 +80,7 @@ export class SessionManager {
     session.resume_snapshot = snapshot;
     session.updated_at = new Date().toISOString();
     await this.sessionStore.save(session);
+    await this.eventLogger?.logSessionPaused({ sessionId, correlationId: uuidv4() });
     return (await this.sessionStore.load(sessionId))!;
   }
 
@@ -93,6 +96,7 @@ export class SessionManager {
     session.step_workflow_state = restored.workflow;
     session.updated_at = new Date().toISOString();
     await this.sessionStore.save(session);
+    await this.eventLogger?.logSessionResumed({ sessionId, correlationId: uuidv4() });
     return (await this.sessionStore.load(sessionId))!;
   }
 

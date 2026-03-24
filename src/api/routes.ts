@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import { derivedState } from '../orchestrator/state-machine.js';
 import type { SessionManager } from '../orchestrator/session-manager.js';
 import type { WorkflowOrchestrator } from '../orchestrator/workflow-orchestrator.js';
@@ -13,14 +14,16 @@ export interface AppDependencies {
 export function createRouter(deps: AppDependencies): express.Router {
   const { sessionManager, workflowOrchestrator, ingestionJobManager } = deps;
   const router = express.Router();
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 },
+  });
 
   // POST /sessions
   router.post('/sessions', async (req, res, next) => {
     try {
       const { manual_id } = req.body as { manual_id: string };
-      const created = await sessionManager.createSession(manual_id);
-      await sessionManager.startSession(created.session_id);
-      const session = await sessionManager.requestEvidence(created.session_id);
+      const session = await sessionManager.createSession(manual_id);
       res.status(201).json({
         session_id: session.session_id,
         resume_token: session.resume_token_ref,
@@ -36,7 +39,8 @@ export function createRouter(deps: AppDependencies): express.Router {
   // POST /session/:session_id/start
   router.post('/session/:session_id/start', async (req, res, next) => {
     try {
-      const session = await sessionManager.startSession(req.params.session_id);
+      await sessionManager.startSession(req.params.session_id);
+      const session = await sessionManager.requestEvidence(req.params.session_id);
       res.json({
         session_id: session.session_id,
         session_lifecycle_state: session.session_lifecycle_state,
@@ -159,11 +163,23 @@ export function createRouter(deps: AppDependencies): express.Router {
   });
 
   // POST /ingest_manual
-  router.post('/ingest_manual', async (req, res, next) => {
+  router.post('/ingest_manual', upload.single('file'), async (req, res, next) => {
     try {
-      const body = req.body as { file_base64?: string; metadata?: { manufacturer?: string; product_name?: string } };
-      const buffer = body.file_base64 ? Buffer.from(body.file_base64, 'base64') : Buffer.alloc(0);
-      const job = await ingestionJobManager.startIngestionJob(buffer, body.metadata);
+      const body = req.body as {
+        file_base64?: string;
+        manufacturer?: string;
+        product_name?: string;
+        metadata?: { manufacturer?: string; product_name?: string };
+      };
+      const metadata = body.metadata ?? {
+        manufacturer: body.manufacturer,
+        product_name: body.product_name,
+      };
+      const buffer = req.file?.buffer ?? (body.file_base64 ? Buffer.from(body.file_base64, 'base64') : Buffer.alloc(0));
+      if (buffer.length === 0) {
+        throw { code: 'VALIDATION_ERROR', message: 'A PDF file upload is required' };
+      }
+      const job = await ingestionJobManager.startIngestionJob(buffer, metadata);
       res.status(202).json({
         job_id: job.job_id,
         manual_id: job.manual_id,

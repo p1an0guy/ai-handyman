@@ -16,6 +16,7 @@ export function evaluateTransition(
   const nextStep = stepGraph.steps.find(s => s.step_id === proposal.proposed_next_step_id);
   if (nextStep) {
     const completedIds = new Set(sessionState.completed_steps.map(c => c.step_id));
+    completedIds.add(proposal.current_step_id);
     const overriddenIds = new Set(sessionState.overrides.map(o => o.step_id));
     for (const prereq of nextStep.prerequisites) {
       if (!completedIds.has(prereq) && !overriddenIds.has(prereq)) {

@@ -41,6 +41,13 @@ describe('SafetyPolicy', () => {
     expect(result.prerequisite_violations.length).toBeGreaterThan(0);
   });
 
+  it('treats the current step as completed when evaluating the next step', () => {
+    const session = createSampleSession();
+    const result = evaluateTransition(makeProposal({ current_step_id: 'step-1', proposed_next_step_id: 'step-2' }), session, sampleStepGraph);
+    expect(result.result).toBe('pass');
+    expect(result.prerequisite_violations).toHaveLength(0);
+  });
+
   it('warns on low confidence without mismatch', () => {
     const session = createSampleSession();
     const result = evaluateTransition(makeProposal({ confidence_score: 0.3 }), session, sampleStepGraph);

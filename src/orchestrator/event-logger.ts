@@ -120,7 +120,7 @@ export class OrchestratorEventLogger {
     result: string;
     details?: Record<string, unknown>;
   }): Promise<void> {
-    await this.log('state_transition', {
+    await this.log('safety_evaluation', {
       session_id: opts.sessionId,
       correlation_id: opts.correlationId,
       payload: { step_id: opts.stepId, details: { safety_result: opts.result, ...opts.details } },

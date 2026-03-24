@@ -2,10 +2,21 @@ import { useState, useCallback } from 'react';
 
 interface SessionInfo {
   session_id: string;
-  resume_token: string;
   session_lifecycle_state: string;
   step_workflow_state: string;
   state: string;
+}
+
+const resumeTokenKey = (sessionId: string) => `resume_token_${sessionId}`;
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'object' && error !== null) {
+    const maybeError = error as { error?: { message?: string } };
+    if (maybeError.error?.message) {
+      return maybeError.error.message;
+    }
+  }
+  return fallback;
 }
 
 export function useSession(sessionId: string) {
@@ -20,16 +31,25 @@ export function useSession(sessionId: string) {
       const res = await fetch(`/api/session/${sessionId}/current_step`);
       if (!res.ok) throw await res.json();
       const data = await res.json();
-      setSession(prev => ({ ...prev, session_id: sessionId, resume_token: prev?.resume_token ?? '', ...data }));
-    } catch (e: any) {
-      setError(e?.error?.message ?? 'Failed to load session');
+      setSession({ session_id: sessionId, ...data });
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, 'Failed to load session'));
     } finally {
       setLoading(false);
     }
   }, [sessionId]);
 
+  const handleResumeTokenError = useCallback((err: { error?: { code?: string; message?: string } } | null | undefined) => {
+    if (err?.error?.code === 'INVALID_RESUME_TOKEN') {
+      localStorage.removeItem(resumeTokenKey(sessionId));
+      setError('Resume token is invalid or expired. Start a new session from the upload flow.');
+      return true;
+    }
+    return false;
+  }, [sessionId]);
+
   const pauseSession = useCallback(async () => {
-    const token = localStorage.getItem(`resume_token_${sessionId}`);
+    const token = localStorage.getItem(resumeTokenKey(sessionId));
     if (!token) { setError('No resume token found'); return; }
     try {
       const res = await fetch(`/api/session/${sessionId}/pause`, {
@@ -39,13 +59,14 @@ export function useSession(sessionId: string) {
       if (!res.ok) throw await res.json();
       const data = await res.json();
       setSession(prev => prev ? { ...prev, ...data } : null);
-    } catch (e: any) {
-      setError(e?.error?.message ?? 'Failed to pause');
+    } catch (error: unknown) {
+      if (handleResumeTokenError(error as { error?: { code?: string; message?: string } })) return;
+      setError(getErrorMessage(error, 'Failed to pause'));
     }
-  }, [sessionId]);
+  }, [handleResumeTokenError, sessionId]);
 
   const resumeSession = useCallback(async () => {
-    const token = localStorage.getItem(`resume_token_${sessionId}`);
+    const token = localStorage.getItem(resumeTokenKey(sessionId));
     if (!token) { setError('No resume token found'); return; }
     try {
       const res = await fetch(`/api/session/${sessionId}/resume`, {
@@ -55,10 +76,11 @@ export function useSession(sessionId: string) {
       if (!res.ok) throw await res.json();
       const data = await res.json();
       setSession(prev => prev ? { ...prev, ...data } : null);
-    } catch (e: any) {
-      setError(e?.error?.message ?? 'Failed to resume');
+    } catch (error: unknown) {
+      if (handleResumeTokenError(error as { error?: { code?: string; message?: string } })) return;
+      setError(getErrorMessage(error, 'Failed to resume'));
     }
-  }, [sessionId]);
+  }, [handleResumeTokenError, sessionId]);
 
   return { session, loading, error, loadSession, pauseSession, resumeSession, setSession, setError };
 }

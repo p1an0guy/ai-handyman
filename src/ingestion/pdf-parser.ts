@@ -10,6 +10,20 @@ export interface PDFUploadValidation {
   error?: { code: string; message: string };
 }
 
+function fallbackParsedPDF(buffer: Buffer): ParsedPDF {
+  const text = buffer.toString('utf-8', 0, Math.min(buffer.length, 10000));
+  return {
+    text,
+    pageCount: 1,
+    pageTexts: [text],
+  };
+}
+
+function isLikelyParseablePDF(buffer: Buffer): boolean {
+  const sample = buffer.toString('latin1', 0, Math.min(buffer.length, 5000));
+  return sample.includes('xref') && sample.includes('%%EOF');
+}
+
 export function validatePDFUpload(buffer: Buffer, maxSizeMB: number = 50): PDFUploadValidation {
   if (buffer.length === 0) {
     return { valid: false, error: { code: 'EMPTY_FILE', message: 'File is empty' } };
@@ -29,6 +43,9 @@ export async function parsePDF(buffer: Buffer): Promise<ParsedPDF> {
   if (!validation.valid) {
     throw { code: validation.error!.code, message: validation.error!.message };
   }
+  if (!isLikelyParseablePDF(buffer)) {
+    return fallbackParsedPDF(buffer);
+  }
   try {
     const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
@@ -41,11 +58,7 @@ export async function parsePDF(buffer: Buffer): Promise<ParsedPDF> {
     };
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err) throw err;
-    return {
-      text: buffer.toString('utf-8', 0, Math.min(buffer.length, 10000)),
-      pageCount: 1,
-      pageTexts: [buffer.toString('utf-8', 0, Math.min(buffer.length, 10000))],
-    };
+    return fallbackParsedPDF(buffer);
   }
 }
 
