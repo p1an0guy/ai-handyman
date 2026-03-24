@@ -1,6 +1,6 @@
 # AI Handyman — Implementation Progress
 
-## Current Phase: Phase 4 COMPLETE, starting Phase 5
+## Current Phase: Phase 5 COMPLETE
 
 ## Branch: main
 
@@ -21,16 +21,15 @@
 - [x] Task 20: Safety/policy layer (28a63e1)
 - [x] Task 21: Verification subsystem (1a09dcb)
 
+### Phase 5: Manual Ingestion Hardening ✅
+- [x] Task 22: PDF parsing and extraction (8256013)
+- [x] Task 23: Step Graph generation (27a7182)
+- [x] Task 24: Ingestion Job Manager + wire API endpoints (0125f34)
+
 ## Verification Status
 - Backend build: ✅ clean
 - Backend lint: ✅ clean
 - Frontend build: ✅ clean
 
-## Next Up: Phase 5 — Manual Ingestion Hardening
-- Task 22: PDF parsing and extraction
-- Task 23: Step Graph generation
-- Task 24: Ingestion Job Manager
-
 ## Open Items
 - No git remote configured
-- Ingestion API endpoints still stubbed — Phase 5 will wire them up
