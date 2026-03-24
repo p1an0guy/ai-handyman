@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "build:frontend": "cd src/frontend && npm run build",
     "dev": "tsx src/server.ts",
+    "dev:backend": "tsx src/server.ts",
+    "dev:frontend": "cd src/frontend && npm run dev",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write src",
