@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { UploadPage } from './pages/UploadPage';
 import { IngestionPage } from './pages/IngestionPage';
 import { SessionPage } from './pages/SessionPage';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <Route path="/ingestion/:jobId" element={<IngestionPage />} />
         <Route path="/session/:sessionId" element={<SessionPage />} />
       </Routes>
+      <OfflineIndicator />
     </BrowserRouter>
   );
 }
