@@ -31,7 +31,7 @@ describe('API routes', () => {
       { ...sampleDiagramIndex, manual_id: manualId },
     );
 
-    const createRes = await fetch(`${baseUrl}/sessions`, {
+    const createRes = await fetch(`${baseUrl}/api/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ manual_id: manualId }),
@@ -47,7 +47,7 @@ describe('API routes', () => {
     expect(created.session_lifecycle_state).toBe('NOT_STARTED');
     expect(created.step_workflow_state).toBe('IN_PROGRESS');
 
-    const startRes = await fetch(`${baseUrl}/session/${created.session_id}/start`, {
+    const startRes = await fetch(`${baseUrl}/api/session/${created.session_id}/start`, {
       method: 'POST',
     });
     expect(startRes.status).toBe(200);
@@ -63,7 +63,7 @@ describe('API routes', () => {
     const formData = new FormData();
     formData.append('file', new Blob([Buffer.from('%PDF-1.4 fake content')], { type: 'application/pdf' }), 'manual.pdf');
 
-    const ingestRes = await fetch(`${baseUrl}/ingest_manual`, {
+    const ingestRes = await fetch(`${baseUrl}/api/ingest_manual`, {
       method: 'POST',
       body: formData,
     });
@@ -87,5 +87,19 @@ describe('API routes', () => {
     }
 
     throw new Error(`Ingestion job did not complete, final status was ${status}`);
+  });
+
+  it('serves uploaded images through the API image route', async () => {
+    const uploaded = await deps.imageStore.upload(Buffer.from('fake-jpeg-data'), {
+      session_id: 'session-image-test',
+      step_id: 'step-1',
+      filename: 'evidence.jpg',
+    });
+
+    const imageRes = await fetch(`${baseUrl}/api/images/${uploaded.ref}`);
+    expect(imageRes.status).toBe(200);
+    expect(imageRes.headers.get('content-type')).toContain('image/jpeg');
+    const body = Buffer.from(await imageRes.arrayBuffer());
+    expect(body.equals(Buffer.from('fake-jpeg-data'))).toBe(true);
   });
 });

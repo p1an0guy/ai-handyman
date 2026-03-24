@@ -1,5 +1,8 @@
 import express from 'express';
 import cors from 'cors';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   InMemorySessionStore,
   InMemoryEventLog,
@@ -32,6 +35,9 @@ const ingestionJobManager = new IngestionJobManager(jobStore, manualStore, model
 export const deps = { sessionStore, eventLog, imageStore, manualStore, jobStore, sessionManager, workflowOrchestrator, ingestionJobManager };
 
 const app = express();
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(currentDir, '..');
+const frontendDistDir = path.resolve(projectRoot, 'src/frontend/dist');
 
 app.use(cors());
 app.use(express.json());
@@ -40,7 +46,17 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.use(createRouter({ sessionManager, workflowOrchestrator, ingestionJobManager }));
+const apiRouter = createRouter({ sessionManager, workflowOrchestrator, ingestionJobManager, imageStore });
+app.use('/api', apiRouter);
+app.use(apiRouter);
+
+if (existsSync(frontendDistDir)) {
+  app.use(express.static(frontendDistDir));
+  app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
+    res.sendFile(path.join(frontendDistDir, 'index.html'));
+  });
+}
+
 app.use(errorHandler);
 
 const PORT = process.env.PORT ?? 3001;

@@ -290,7 +290,11 @@ export class WorkflowOrchestrator {
       step_workflow_state: saved.step_workflow_state,
       new_state: derivedState(saved.session_lifecycle_state, saved.step_workflow_state),
       next_step: nextStep,
-      mismatch: mismatch_detected ? { type: mismatch_details?.type, description: mismatch_details?.description } : undefined,
+      mismatch: mismatch_detected ? {
+        type: mismatch_details?.type,
+        description: mismatch_details?.description,
+        expected_diagram: diagramEntry ? `/api/images/${diagramEntry.image_ref}` : undefined,
+      } : undefined,
       additional_evidence_request: verificationResult === 'insufficient' ? saved.pending_evidence_request : undefined,
       warnings: newWarnings,
     };

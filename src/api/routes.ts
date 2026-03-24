@@ -4,15 +4,17 @@ import { derivedState } from '../orchestrator/state-machine.js';
 import type { SessionManager } from '../orchestrator/session-manager.js';
 import type { WorkflowOrchestrator } from '../orchestrator/workflow-orchestrator.js';
 import type { IngestionJobManager } from '../ingestion/job-manager.js';
+import type { ImageStore } from '../storage/interfaces.js';
 
 export interface AppDependencies {
   sessionManager: SessionManager;
   workflowOrchestrator: WorkflowOrchestrator;
   ingestionJobManager: IngestionJobManager;
+  imageStore: ImageStore;
 }
 
 export function createRouter(deps: AppDependencies): express.Router {
-  const { sessionManager, workflowOrchestrator, ingestionJobManager } = deps;
+  const { sessionManager, workflowOrchestrator, ingestionJobManager, imageStore } = deps;
   const router = express.Router();
   const upload = multer({
     storage: multer.memoryStorage(),
@@ -162,6 +164,24 @@ export function createRouter(deps: AppDependencies): express.Router {
     }
   });
 
+  // GET /images/:ref
+  router.get('/images/:ref', async (req, res) => {
+    try {
+      const image = await imageStore.retrieve({ ref: req.params.ref, path: '' });
+      res.type('image/jpeg').send(image);
+    } catch {
+      const label = escapeForSvg(req.params.ref);
+      res.type('image/svg+xml').send(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+          <rect width="640" height="360" fill="#f5f5f5"/>
+          <rect x="24" y="24" width="592" height="312" rx="12" fill="#ffffff" stroke="#d0d0d0"/>
+          <text x="320" y="160" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#444444">Reference diagram unavailable</text>
+          <text x="320" y="196" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#777777">${label}</text>
+        </svg>`,
+      );
+    }
+  });
+
   // POST /ingest_manual
   router.post('/ingest_manual', upload.single('file'), async (req, res, next) => {
     try {
@@ -213,4 +233,13 @@ export function createRouter(deps: AppDependencies): express.Router {
   });
 
   return router;
+}
+
+function escapeForSvg(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
 }
