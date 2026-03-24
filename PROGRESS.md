@@ -1,47 +1,36 @@
 # AI Handyman — Implementation Progress
 
-## Current Phase: Phase 4 — AI, Safety, and Verification Hardening
+## Current Phase: Phase 4 COMPLETE, starting Phase 5
 
 ## Branch: main
 
 ## Completed Tasks
 
 ### Phase 1: Foundation ✅
-- [x] Task 1: Project setup and configuration (2f33f42)
-- [x] Task 2: Core data model types (2dd27d7)
-- [x] Task 3: State machine logic (bdab050)
-- [x] Task 4: Storage interfaces and in-memory stores (e24c881)
-- [x] Task 5: Development fixtures, mock AI adapter, smoke harness (e605da0)
+- [x] Task 1-5: Project setup, data models, state machine, storage, fixtures
 
 ### Phase 2: Backend Vertical Slice ✅
-- [x] Task 6: Session lifecycle management (633a4a0)
-- [x] Task 7: Step workflow orchestration (c75253d)
-- [x] Task 8: Orchestrator event logger (5afc902)
-- [x] Task 9: Public API endpoints (8da73fd)
-- [x] Task 10: Typed API contracts and client helpers (d33b63f)
-- [x] Task 11: API error handling middleware (7470c37, 099fd86)
+- [x] Task 6-11: Session lifecycle, workflow orchestration, event logging, API endpoints, contracts, middleware
 
 ### Phase 3: Frontend Vertical Slice ✅
-- [x] Task 12: Frontend scaffolding and routing (76788b6)
-- [x] Task 13: Manual ingestion UI (8fcfa60)
-- [x] Task 14: Session management UI (660c7d9)
-- [x] Task 15: Assembly session UI (b94f35a)
-- [x] Task 16: Text chat UI (bd423f0)
-- [x] Task 17: Frontend error handling components (1031ebb)
+- [x] Task 12-17: Vite+React scaffolding, ingestion UI, session management, assembly UI, chat, error handling
+
+### Phase 4: AI, Safety, and Verification Hardening ✅
+- [x] Task 18: Gemini AI adapter with retry logic (24d4b57)
+- [x] Task 19: Model orchestration layer (c5803d0)
+- [x] Task 20: Safety/policy layer (28a63e1)
+- [x] Task 21: Verification subsystem (1a09dcb)
 
 ## Verification Status
 - Backend build: ✅ clean
 - Backend lint: ✅ clean
-- Frontend build: ✅ clean (38 modules, 0 errors)
-- Smoke: ✅ all checks pass
+- Frontend build: ✅ clean
 
-### Phase 4: AI, Safety, and Verification Hardening (in progress)
-- [x] Task 18: AI adapter abstraction — GeminiDevAPIAdapter + barrel export (24d4b57)
-- [ ] Task 19: Model Orchestration Layer
-- [ ] Task 20: Safety/Policy Layer
-- [ ] Task 21: Verification Subsystem
+## Next Up: Phase 5 — Manual Ingestion Hardening
+- Task 22: PDF parsing and extraction
+- Task 23: Step Graph generation
+- Task 24: Ingestion Job Manager
 
 ## Open Items
 - No git remote configured
-- Ingestion endpoints still stubbed (Phase 5)
-- Live Gemini integration wired in GeminiDevAPIAdapter; needs real API key at runtime
+- Ingestion API endpoints still stubbed — Phase 5 will wire them up
