@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { SessionLifecycleState, StepWorkflowState } from '../models/index.js';
-import type { SessionState, StepTransitionProposal } from '../models/index.js';
+import type { SessionState } from '../models/index.js';
 import {
-  validateTransition, validateLifecycleTransition, validateWorkflowTransition,
+  validateTransition,
   derivedState, captureResumeSnapshot, restoreFromSnapshot,
   type LifecycleTrigger, type WorkflowTrigger, type StateTrigger,
 } from './state-machine.js';
