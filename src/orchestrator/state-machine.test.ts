@@ -209,7 +209,7 @@ describe('Property-Based Tests', () => {
   it('Property 7: override records contain step_id, timestamp, mismatch_reason, and confidence_at_override', () => {
     const arbOverrideRecord: fc.Arbitrary<OverrideRecord> = fc.record({
       step_id: fc.uuid(),
-      overridden_at: fc.date().map(d => d.toISOString()),
+      overridden_at: fc.date({ min: new Date('2000-01-01'), max: new Date('2100-01-01') }).map(d => d.toISOString()),
       user_confirmation: fc.constant(true),
       mismatch_reason: fc.string({ minLength: 1 }),
       confidence_at_override: fc.double({ min: 0, max: 1, noNaN: true }),
