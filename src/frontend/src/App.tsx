@@ -13,7 +13,7 @@ function App() {
         <Route path="/ingestion/:jobId" element={<IngestionPage />} />
         <Route path="/session/:sessionId" element={<SessionPage />} />
       </Routes>
-      <OfflineIndicator />
+      <OfflineIndicator onReconnect={() => window.location.reload()} />
     </BrowserRouter>
   );
 }

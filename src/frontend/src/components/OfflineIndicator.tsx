@@ -1,18 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
-export function OfflineIndicator() {
+interface OfflineIndicatorProps {
+  onReconnect?: () => void;
+}
+
+export function OfflineIndicator({ onReconnect }: OfflineIndicatorProps) {
   const [online, setOnline] = useState(navigator.onLine);
+  const [wasOffline, setWasOffline] = useState(false);
+
+  const handleOnline = useCallback(() => {
+    setOnline(true);
+    if (wasOffline && onReconnect) {
+      onReconnect();
+    }
+    setWasOffline(false);
+  }, [wasOffline, onReconnect]);
+
+  const handleOffline = useCallback(() => {
+    setOnline(false);
+    setWasOffline(true);
+  }, []);
 
   useEffect(() => {
-    const handleOnline = () => setOnline(true);
-    const handleOffline = () => setOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [handleOnline, handleOffline]);
 
   if (online) return null;
   return (
