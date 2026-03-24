@@ -1,0 +1,3 @@
+export type EventType = 'state_transition' | 'model_request' | 'model_response' | 'evidence_submission' | 'warning_issued' | 'block_applied' | 'override_recorded' | 'session_paused' | 'session_resumed' | 'ingestion_job_started' | 'ingestion_job_updated' | 'ingestion_job_resumed' | 'ingestion_job_failed' | 'ingestion_job_completed';
+export type EventPayload = { from_state?: string; to_state?: string; step_id?: string; job_id?: string; job_stage?: string; prompt_ref?: string; response_ref?: string; confidence_score?: number; details?: Record<string, unknown> };
+export type StructuredEvent = { event_id: string; session_id?: string; manual_id?: string; correlation_id: string; timestamp: string; event_type: EventType; payload: EventPayload };
